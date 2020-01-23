@@ -1,0 +1,504 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Module>
+    <ModulePrefs
+	title="インク入荷予定"
+	description="インク入荷予定を共有(150307_1719)">
+        <Require feature="views"/>
+        <Require feature="dynamic-height"/>
+        <Require feature="minimessage"/>
+        <Require feature="tabs"/>
+        <Require feature="aipostyle"/>
+        <Require feature="osapi"/>
+        <Require feature="setprefs"/>
+    </ModulePrefs>
+    <UserPref name="p1-homeRows" display_name="表示件数（通常時）" datatype="enum" default_value="5">
+        <EnumValue value="5"/>
+        <EnumValue value="10"/>
+        <EnumValue value="20"/>
+        <EnumValue value="50"/>
+    </UserPref>
+    <UserPref name="p2-canvasRows" display_name="表示件数（最大化時）" datatype="enum" default_value="10">
+        <EnumValue value="5"/>
+        <EnumValue value="10"/>
+        <EnumValue value="20"/>
+        <EnumValue value="50"/>
+    </UserPref>
+
+    <Content type="html" view="home,canvas"><![CDATA[
+        <div class="aipostyle">
+            <form>
+                <h3>インク入荷予定</h3>
+                <div class="aipostyle" id="dataAndPager">
+                </div>
+            </form>
+            <form>
+                <h3>インク入荷予定登録</h3>
+                <table class="list wide" width="100%">
+                    <tr>
+                        <th width="50">入荷予定日</th>
+                        <td>
+                            <select id="yearid" onchange="monthSet() ; daySet()">年</select>
+                            <select id="monthid" onchange="daySet()">月</select>
+                            <select id="dayid">日</select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th width="50">品名・数量</th>
+                        <td><input type="text"
+                                   id="commentid" size="15"/></td>
+                    </tr>
+                        <th width="50">担当者</th>
+                        <td><input type="text"
+                                   id="staffid" size="15"/></td>
+                    </tr>
+                </table>
+                <div class="center">
+                    <input type="button" value="登録する" onclick="eventSubmit()"/>
+                </div>
+            </form>
+<!--
+            <form>
+                <div class="right">
+                    <input type="button" value="DEBUG" onclick="eventDeleteAllKey()"/>
+                </div>
+            </form>
+-->
+        </div>
+
+        <script type="text/javascript" src="https://d2hv4ldeur9lfv.cloudfront.net/opensocial-jquery-1.3.2.5.min.js">
+        </script>
+        <script type="text/javascript">
+
+            //変数設定
+                //日時に関する変数
+                var dateToday = new Date();
+                var yearToday = dateToday.getYear(); //今が2011の場合、ブラウザによって2011にも111にもなる
+                var yearCEToday;
+                    if (yearToday < 2000){
+                        yearCEToday = yearToday + 1900;
+                    }else{
+                        yearCEToday = yearToday;
+                    }
+
+                var monthToday = dateToday.getMonth() + 1;
+                var dayToday = dateToday.getDate();
+                var yearMonthDayToday = yearCEToday*10000 + monthToday*100 + dayToday;
+                var msg = new gadgets.MiniMessage();
+                var prefs = new gadgets.Prefs();
+                var max_per_page = getPrefRows();
+                //現在表示されているページ番号
+                var currentPage =0;
+
+            //セレクトボックスを今日に初期化
+            function initSelectbox(){
+                //あとでセレクトボックスに挿入するHTML
+                var yearHtml = new Array();
+                var monthHtml = new Array();
+                var dayHtml = new Array();
+                var daysOfMonth;
+                //yearHtmlに現在から10年後までを代入
+                for (var i=yearCEToday ; i<=yearCEToday+10 ; i++){
+                    yearHtml.push('<option value="' + i + '">' + i + '</option>');
+                }
+
+                //monthHtmlに今月から12を代入
+                for (var i=monthToday ; i<=12 ; i++){
+                    monthHtml.push('<option value="' + i + '">' + i + '</option>');
+                }
+
+                //月毎の日数を計算
+                if (monthToday == 4 || monthToday == 6 || monthToday == 9 || monthToday == 11){
+                    daysOfMonth = 30;
+                }else if(monthToday != 2){
+                    daysOfMonth = 31;
+                }else{
+                    daysOfMonth = daysOfFeb(yearToday);
+                }
+
+                //dayHtmlに、今日以降の今月の日を代入
+                for (var i=dayToday ; i <= daysOfMonth ; i++){
+                    dayHtml.push('<option value="' + i + '">' + i + '</option>');
+                }
+
+                $("yearid").html("");
+                $("#yearid").html(""+yearHtml);
+                $("monthid").html("");
+                $("#monthid").html(""+monthHtml);
+                $("dayid").html("");
+                $("#dayid").html(""+dayHtml);
+            }
+
+            //月をセレクトボックスに挿入
+            function monthSet(){
+                //あとでセレクトボックスに挿入するHTML
+                var monthHtml = new Array();
+                //現在セレクトボックスで選択されている年月
+                var yearSelectedNow = document.getElementById("yearid").selectedIndex + yearCEToday;
+                var monthSelectedNow;
+                    if ( yearSelectedNow == yearCEToday ){
+                        monthSelectedNow = document.getElementById("monthid").selectedIndex + monthToday ;
+                    }else{
+                        monthSelectedNow = document.getElementById("monthid").selectedIndex + 1;
+                }
+                if ( yearSelectedNow == yearCEToday ) {
+                    //monthHtmlに今月から12を代入
+                    for (var i=monthToday ; i<=12 ; i++){
+                        monthHtml.push('<option value="' + i + '">' + i + '</option>');
+                    }
+                }else{
+                    for (var i=1 ; i<=12 ; i++){
+                        monthHtml.push('<option value="' + i + '">' + i + '</option>');
+                    }
+                }
+                $("monthid").html("");
+                $("#monthid").html(""+monthHtml);
+            }
+
+            //日をセレクトボックスへ挿入
+            function daySet(){
+                //あとでセレクトボックスに挿入するHTML
+                var dayHtml = new Array();
+                //月ごとの日数を計算して入れておく変数
+                var daysOfMonth;
+                //現在セレクトボックスで選択されている年月
+                var yearSelectedNow = document.getElementById("yearid").selectedIndex + yearCEToday;
+                 var monthSelectedNow;
+                    if ( yearSelectedNow == yearCEToday ){
+                        monthSelectedNow = document.getElementById("monthid").selectedIndex + monthToday ;
+                    }else{
+                        monthSelectedNow = document.getElementById("monthid").selectedIndex + 1;
+                }
+                //月毎の日数を計算
+                if (monthSelectedNow == 4 || monthSelectedNow == 6 || monthSelectedNow == 9 || monthSelectedNow == 11){
+                    daysOfMonth = 30;
+                }else if(monthSelectedNow != 2){
+                    daysOfMonth = 31;
+                }else{
+                    daysOfMonth = daysOfFeb(yearSelectedNow);
+                }
+
+                //dayHtmlに、選択された年と月に合わせた日数を代入
+                if ( (yearSelectedNow == yearCEToday) &&(monthSelectedNow == monthToday) ) {
+                    for (var i=dayToday ; i <= daysOfMonth ; i++){
+                        dayHtml.push('<option value="' + i + '">' + i + '</option>');
+                    }
+                }else{
+                    for (var i=1 ; i <= daysOfMonth ; i++){
+                        dayHtml.push('<option value="' + i + '">' + i + '</option>');
+                    }
+                }
+                $("dayid").html("");
+                $("#dayid").html(""+dayHtml);
+            }
+
+            //2月の日数を求める関数
+            function daysOfFeb(year){
+                if (year%4 == 0){
+                    if (year%100 ==0){
+                        return(28);
+                    }else{
+                    return(29);
+                    }
+                }else{
+                return(28);
+                }
+            }
+
+            //入力されたデータを保存する関数
+            function eventSubmit() {
+                //フォームからの値の取得
+                var yearSubmitted = $("#yearid").val() ;
+                var monthSubmitted = $("#monthid").val();
+                var daySubmitted = $("#dayid").val();
+                var commentSubmitted = $("#commentid").val();
+                var staffSubmitted = $("#staffid").val();
+
+                //ソート用に文字列状態の数字をint型に変換
+                var intYearSubmitted =parseInt(yearSubmitted);
+                var intMonthSubmitted =parseInt(monthSubmitted);
+                var intDaySubmitted =parseInt(daySubmitted);
+                var intYearMonthDaySubmitted = intYearSubmitted*10000 + intMonthSubmitted*100 + intDaySubmitted;
+
+                //データ保存用の年月日
+                var savedYearMonthDay = yearSubmitted + "年" + monthSubmitted + "月" + daySubmitted + "日";
+
+                //バリデート
+                if (!commentSubmitted || commentSubmitted.length > 100 || !staffSubmitted || staffSubmitted.length > 100){
+                    if (!commentSubmitted) {
+                        msg.createTimerMessage("品名・数量を入力してください。", 5);
+                        gadgets.window.adjustHeight();
+                    }
+                    if (commentSubmitted.length > 100) {
+                        msg.createTimerMessage("品名・数量は100文字までで入力してください。", 5);
+                        gadgets.window.adjustHeight();
+                    }
+                    if (!staffSubmitted) {
+                        msg.createTimerMessage("担当者を入力してください。", 5);
+                        gadgets.window.adjustHeight();
+                    }
+                    if (staffSubmitted.length > 100) {
+                        msg.createTimerMessage("担当者は100文字までで入力してください。", 5);
+                        gadgets.window.adjustHeight();
+                    }
+                    gadgets.window.adjustHeight();
+                    return false;
+                }
+
+                var timestamp = new Date().getTime();
+                    if (timestamp % 10 == 0){timestamp++;} //timestampの末尾が０になって捨てられることを防止
+                var key = '__MODULE_ID__.' + timestamp;
+                var date = timestamp + "";
+
+                osapi.appdata.get({ userId: ["@admin"] ,fields: ['keys'] }).execute(function(response) {
+                    for (var userId in response) {
+                        var tmp_data = response[userId];
+                    }
+                    var keys = new Array();
+                    if (tmp_data && tmp_data['keys']) {
+                        keys = gadgets.json.parse(tmp_data['keys']);
+                    }
+
+                    keys.push(key);
+
+                    var data = {};
+                    var data1 = {};
+                    var data2 = {};
+                    data['date'] = gadgets.util.escapeString(date);
+                    data['yearMonthDay'] = gadgets.util.escapeString(savedYearMonthDay);
+                    data['intYearMonthDay'] = intYearMonthDaySubmitted;
+                    data['comment'] = gadgets.util.escapeString(commentSubmitted);
+                    data['staff'] = gadgets.util.escapeString(staffSubmitted);
+                    data1[key] = gadgets.json.stringify(data);
+                    data2['keys'] = gadgets.json.stringify(keys);
+//                    var batch = osapi.newBatch()
+//                            .add('update1', osapi.appdata.update({ userId: '@admin', data: data1, appId: '@app' }))
+//                            .add('update2', osapi.appdata.update({ userId: '@admin', data: data2, appId: '@app' }));
+//                   	 batch.execute(function(response) {
+					osapi.appdata.update({ userId: '@admin', data: data1, appId: '@app' }).execute(function(response) {
+						osapi.appdata.update({ userId: '@admin', data: data2, appId: '@app' }).execute(function(response) {
+                     		$("#commentid").val("");
+                     		$("#staffid").val("");
+                        	// データの再表示
+                    		repaint(currentPage);
+                        	msg.createTimerMessage("登録しました。", 3);
+                        	gadgets.window.adjustHeight();
+							return true;
+						});
+                    });
+                });
+            }
+
+            //データの削除
+            function deleteItem(key){
+				if (confirm("入荷予定を削除してよろしいですか？")) {
+                	osapi.appdata.get({ userId: '@admin' ,fields: ['keys'] }).execute(function(response) {
+                		for (var userId in response) {
+                    		var tmp_keys = gadgets.json.parse(response[userId]['keys']);
+                    		for (var tmp_key in tmp_keys) {
+								if(tmp_keys[tmp_key]==key){
+                    				osapi.appdata['delete']({ userId: '@admin' , fields: [tmp_keys[tmp_key]] }).execute(function(response) {
+                        				deleteFromKeys(key);
+										repaint(currentPage);
+                        				msg.createTimerMessage("削除しました。", 3);
+                       					gadgets.window.adjustHeight();
+									});
+								}
+							}
+                    	}
+					});
+                }
+            }
+            //すべてのKeyの削除(デバッグ 順番にKEYを表示して確認する)
+            function eventDeleteAllKey(){
+                osapi.appdata.get({ userId: '@admin' ,fields: ['keys'] }).execute(function(response) {
+                	// 全てのkeyを取得して配列keysに入れる
+                	for (var userId in response) {
+                    	var tmp_keys = gadgets.json.parse(response[userId]['keys']);
+                    	for (var tmp_key in tmp_keys) {
+							if(confirm(tmp_keys[tmp_key])){
+                    			osapi.appdata['delete']({ userId: '@admin' , fields: [tmp_keys[tmp_key]] }).execute(function(response) {
+                        			repaint(currentPage);
+                        			msg.createTimerMessage("削除しました。", 3);
+                       				gadgets.window.adjustHeight();
+								});
+							}
+                    	}
+                	}
+					
+				});
+			}
+            //Keysの削除
+            function deleteFromKeys(key){
+                osapi.appdata.get({ userId: '@admin' ,fields: ['keys'] }).execute(function(response) {
+                    for (var userId in response) {
+                        var tmp_data = response[userId];
+                    }
+                    var keys = new Array();
+                    if (tmp_data && tmp_data['keys']) {
+                        keys = gadgets.json.parse(tmp_data['keys']);
+                    }
+					var nkeys = new Array();
+                	for(var i in keys) {
+						if( keys[i]!=key ){
+							nkeys.push(keys[i]);
+						}
+                	}
+                    var data2 = {};
+                    data2['keys'] = gadgets.json.stringify(nkeys);
+					osapi.appdata.update({ userId: '@admin', data: data2, appId: '@app' }).execute(function(response) {
+					});
+				});
+			}
+            //Keys強制消去
+            function eraseKeys(){
+           		osapi.appdata['delete']({ userId: '@admin' ,fields: ['keys'] }).execute(function(response) {
+					confirm("erase ok");
+                });
+ 			}
+            //テーブルの再描画関数
+            function repaint(pageIndex) {
+                currentPage = pageIndex;
+
+                var row_datas = [];
+                var keys = [];
+                var counter = 0; //表示するデータ数を数える変数
+                var dataNum = 0; //表示するデータ数
+
+                // データの取得
+                osapi.appdata.get({ userId: '@admin' ,fields: ['keys'] }).execute(function(response) {
+                	// 全てのkeyを取得して配列keysに入れる
+                	for (var userId in response) {
+                    	var tmp_keys = gadgets.json.parse(response[userId]['keys']);
+                    	for (var tmp_key in tmp_keys) {
+                        	keys.push(tmp_keys[tmp_key]);
+                    	}
+                	}
+                	// 配列keysの中身をkeyとして使ってアプリデータを取得
+                	osapi.appdata.get({ userId: '@admin' ,fields: keys }).execute(function(response) {
+                		for (var key in response) {
+                    		var data = response[key];
+                    		for (var key2 in data){
+                    			// データの作成
+                    			var rowdata = gadgets.json.parse(data[key2]);
+                    			rowdata["key"] = key2;
+                    			row_datas.push(rowdata);
+                    		}
+                		}
+                    	// 投稿時間降順
+                    	row_datas.sort(function(a, b) {
+                    		return a["date"] < b["date"] ? -1 : 1;
+                    	});
+						// 日付降順
+                        row_datas.sort(function(a, b) {
+                            return a["intYearMonthDay"] < b["intYearMonthDay"] ? -1 : 1;
+                       	});
+
+                  		//データ数カウント
+                        for (var i in row_datas) {
+                        	dataNum++;
+                        }
+						var tableHtml = new Array();
+                        // テーブルヘッダー
+                        if (dataNum > 0) {
+                        	tableHtml.push('\
+                            	<table class="list wide" class ="aipostyle">\
+                                <tr>\
+                                <th>入荷予定日</th>\
+                                <th>品名・数量</th>\
+                                <th>担当者</th>\
+                                <th class="thin">削除</th>\
+                                </tr>\
+                        	');
+                   		}else{
+                        	tableHtml.push('\
+                            	<tr>\
+                                <th>インク入荷予定はありません。</th>\
+                                </tr>\
+                            ');
+                        }
+
+                        var pageNum = Math.ceil(dataNum / max_per_page); //全ページ数
+                        //currentPageが存在しない番号を指していた場合、pageの最大値に置き換える(データを消してそのページにデータがなくなった場合)
+                        if (currentPage > pageNum-1 ){
+                        	currentPage = pageNum-1;
+							if( currentPage < 0 ){
+								currentPage = 0;
+							}
+                        }
+                        for (var i in row_datas) {
+                        	var css_class = '';
+                            if (counter < currentPage * max_per_page || counter >= (currentPage+1) * max_per_page) {
+                            	css_class += ' style="display:none;"';
+                            }
+                            counter++;
+                            var delete_html = '<input type="button" value="削除" onclick="deleteItem(' + row_datas[i]["key"] + ')"/>';
+                            var key_data = '\
+                                <tr' + css_class + '>\
+                                <td>' + gadgets.util.escapeString(row_datas[i]["yearMonthDay"]) + '</td>\
+                                <td>' + gadgets.util.escapeString(row_datas[i]["comment"]) + '</td>\
+                                <td>' + gadgets.util.escapeString(row_datas[i]["staff"]) + '</td>\
+                                <td>' + delete_html + '</td>\
+                                </tr>\
+                                ';
+                            // データの表示
+                            tableHtml.push(key_data); //全データを挿入
+                        }
+                        tableHtml.push('</table>');
+                        //ページャ機能
+                        if (pageNum > 1) {
+                            tableHtml.push('<div class="clearfix"><ul class="pagination">');
+                            for (var i = 0; i < pageNum; i++) {
+                            	if (i == currentPage) {
+                                	tableHtml.push('<li class="selected">');
+                                } else {
+                                	tableHtml.push('<li>');
+                                }
+                                tableHtml.push('<a href="javascript:void(0);" onclick="repaint(' + i + ');">');
+                                tableHtml.push(i + 1);
+                                tableHtml.push('</a></li>');
+                            }
+                            tableHtml.push('</ul></div>');
+                        }
+                        $("#dataAndPager").html("");
+                        document.getElementById('dataAndPager').innerHTML = tableHtml.join('');
+                        // ウインドウの幅再調整
+                        gadgets.window.adjustHeight();
+                    });
+                });
+            }
+
+            /*
+         * 設定の読み込み
+         */
+        function getPrefRows() {
+            // 設定の読み込み
+            var currentView = gadgets.views.getCurrentView();
+            var temp;
+            if (currentView.getName() == "home") {
+                temp = prefs.getInt("p1-homeRows");
+            } else {
+                temp = prefs.getInt("p2-canvasRows");
+            }
+            return temp;
+        }
+           
+        function showMore() {
+            $("#status").children("tr").css("display", "");
+            $("#pager").hide();
+            // ウインドウの幅再調整
+            gadgets.window.adjustHeight();
+        }
+
+            //初期化
+            function init() {
+                initSelectbox();
+                repaint(currentPage);
+                gadgets.window.adjustHeight();
+            }
+
+        gadgets.util.registerOnLoadHandler(init);
+        </script>
+    ]]></Content>
+
+
+</Module>
